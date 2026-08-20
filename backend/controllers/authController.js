@@ -18,39 +18,59 @@ const updateDailyAnalytics = async (field) => {
 };
 
 const signup = async (req, res) => {
+  console.log('📝 Signup called with body:', JSON.stringify(req.body));
   try {
     const { name, email, password, phone, college, course } = req.body;
+
     if (!name || !email || !password) {
+      console.log('❌ Signup: missing fields');
       return res.status(400).json({ success: false, message: 'Name, email and password are required' });
     }
-    const existingUser = await User.findOne({ email });
+
+    console.log('🔍 Checking if email exists:', email);
+    const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
     if (existingUser) {
+      console.log('❌ Signup: email already registered:', email);
       return res.status(400).json({ success: false, message: 'Email already registered' });
     }
+
+    console.log('✅ Email is new, creating user...');
     const verificationToken = generateRandomToken();
     const verificationTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    await User.create({
-      name, email, password,
+
+    const newUser = await User.create({
+      name,
+      email,
+      password,
       phone: phone || '',
       college: college || '',
       course: course || '',
       verificationToken,
       verificationTokenExpiry,
     });
+
+    console.log('✅ User created with ID:', newUser._id);
+
+    console.log('📧 Attempting to send verification email...');
     try {
       const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+      console.log('📧 Verification URL:', verificationUrl);
       const { subject, html } = emailTemplates.verifyEmail(name, verificationUrl);
       await sendEmail({ to: email, subject, html });
+      console.log('✅ Verification email sent successfully');
     } catch (emailErr) {
-      console.error('Email send error:', emailErr.message);
+      console.error('❌ Email send failed (non-fatal):', emailErr.message);
     }
+
     await updateDailyAnalytics('newUsers');
+
     return res.status(201).json({
       success: true,
       message: 'Account created! Please check your email to verify your account.',
     });
   } catch (error) {
-    console.error('Signup error:', error.message);
+    console.error('❌ Signup FULL error:', error);
+    console.error('❌ Signup error message:', error.message);
     return res.status(500).json({ success: false, message: error.message || 'Signup failed' });
   }
 };
@@ -76,6 +96,7 @@ const verifyEmail = async (req, res) => {
 };
 
 const login = async (req, res) => {
+  console.log('🔐 Login called for:', req.body.email);
   try {
     const { email, password } = req.body;
     if (!email || !password) {
@@ -84,7 +105,6 @@ const login = async (req, res) => {
     const ip = req.ip || req.connection.remoteAddress;
     const device = req.headers['user-agent'] || 'Unknown';
 
-    // Admin login
     if (email === process.env.ADMIN_EMAIL && password === process.env.ADMIN_PASSWORD) {
       const token = generateJWT({ id: 'admin', role: 'admin', isAdminEnv: true, email: process.env.ADMIN_EMAIL });
       return res.json({
@@ -105,7 +125,7 @@ const login = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Please verify your email before logging in', needsVerification: true });
     }
     if (user.isBlocked) {
-      return res.status(403).json({ success: false, message: 'Your account has been blocked. Contact support.' });
+      return res.status(403).json({ success: false, message: 'Your account has been blocked.' });
     }
 
     user.lastLogin = new Date();
@@ -144,13 +164,10 @@ const forgotPassword = async (req, res) => {
 
     const user = await User.findOne({ email });
     if (!user) {
-      // Security: don't reveal if email exists
       return res.json({ success: true, message: 'If that email exists, a reset link has been sent.' });
     }
 
     const resetToken = generateRandomToken();
-
-    // ✅ Use findByIdAndUpdate to AVOID triggering pre-save password hash
     await User.findByIdAndUpdate(user._id, {
       resetPasswordToken: resetToken,
       resetPasswordTokenExpiry: new Date(Date.now() + 60 * 60 * 1000),
@@ -177,14 +194,12 @@ const resetPassword = async (req, res) => {
     if (!token || !password) {
       return res.status(400).json({ success: false, message: 'Token and password are required' });
     }
-
     const user = await User.findOne({
       resetPasswordToken: token,
       resetPasswordTokenExpiry: { $gt: Date.now() },
     });
     if (!user) return res.status(400).json({ success: false, message: 'Invalid or expired reset token' });
 
-    // Set password — pre-save will hash it
     user.password = password;
     user.resetPasswordToken = undefined;
     user.resetPasswordTokenExpiry = undefined;
@@ -198,6 +213,7 @@ const resetPassword = async (req, res) => {
 };
 
 const resendVerification = async (req, res) => {
+  console.log('📧 ResendVerification called for:', req.body.email);
   try {
     const { email } = req.body;
     const user = await User.findOne({ email });
@@ -205,8 +221,6 @@ const resendVerification = async (req, res) => {
     if (user.isVerified) return res.status(400).json({ success: false, message: 'Email already verified' });
 
     const verificationToken = generateRandomToken();
-
-    // ✅ Use findByIdAndUpdate to AVOID triggering pre-save password hash
     await User.findByIdAndUpdate(user._id, {
       verificationToken,
       verificationTokenExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000),
@@ -216,8 +230,9 @@ const resendVerification = async (req, res) => {
       const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
       const { subject, html } = emailTemplates.verifyEmail(user.name, verificationUrl);
       await sendEmail({ to: email, subject, html });
+      console.log('✅ Resend verification email sent');
     } catch (emailErr) {
-      console.error('Resend email error:', emailErr.message);
+      console.error('❌ Resend email error:', emailErr.message);
     }
 
     return res.json({ success: true, message: 'Verification email sent.' });
