@@ -20,7 +20,7 @@ const sendEmail = async ({ to, subject, html }) => {
     sendSmtpEmail.htmlContent = html;
     sendSmtpEmail.sender = {
       name: process.env.FROM_NAME || 'ElectroLab',
-      email: process.env.FROM_EMAIL || 'noreply@electrolab.com',
+      email: process.env.FROM_EMAIL || 'chintureddy1470@gmail.com',
     };
     sendSmtpEmail.to = [{ email: to }];
 
