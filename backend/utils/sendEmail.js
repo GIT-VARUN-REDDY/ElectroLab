@@ -1,16 +1,27 @@
-const transporter = require('../config/email');
+const SibApiV3Sdk = require('@getbrevo/brevo');
 
 const sendEmail = async ({ to, subject, html }) => {
   try {
-    const mailOptions = {
-      from: `"${process.env.FROM_NAME}" <${process.env.FROM_EMAIL}>`,
-      to,
-      subject,
-      html,
+    const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+
+    apiInstance.setApiKey(
+      SibApiV3Sdk.TransactionalEmailsApiApiKeys.apiKey,
+      process.env.BREVO_API_KEY
+    );
+
+    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+
+    sendSmtpEmail.subject = subject;
+    sendSmtpEmail.htmlContent = html;
+    sendSmtpEmail.sender = {
+      name: process.env.FROM_NAME || 'ElectroLab',
+      email: process.env.FROM_EMAIL || 'noreply@electrolab.com',
     };
-    const info = await transporter.sendMail(mailOptions);
-    console.log('✅ Email sent:', info.messageId);
-    return info;
+    sendSmtpEmail.to = [{ email: to }];
+
+    const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
+    console.log('✅ Email sent via Brevo API:', result.body?.messageId);
+    return result;
   } catch (error) {
     console.error('❌ sendEmail error:', error.message);
     throw error;

@@ -39,44 +39,32 @@ app.use(helmet());
 // ============================================================
 const allowedOrigins = [
   process.env.FRONTEND_URL,
-  'http://localhost:5173',
+  'https://electro-lab-rose.vercel.app/',
+  'https://electro-20jfolk7b-varun-b382.vercel.app/',
 ].filter(Boolean);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests without an Origin header
-      // (health checks, Postman, server-to-server requests, etc.)
-      if (!origin) {
-        return callback(null, true);
-      }
+      // Allow no-origin requests (Postman, health checks)
+      if (!origin) return callback(null, true);
 
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
+      // Allow exact matches
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+
+      // Allow ANY vercel.app subdomain for your project
+      if (origin.endsWith('.vercel.app')) return callback(null, true);
 
       console.log('❌ CORS blocked origin:', origin);
-
       return callback(new Error('Not allowed by CORS'));
     },
-
     credentials: true,
-
-    methods: [
-      'GET',
-      'POST',
-      'PUT',
-      'DELETE',
-      'PATCH',
-      'OPTIONS',
-    ],
-
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-    ],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
+
+app.options('*', cors());
 
 // Handle preflight requests
 app.options('*', cors());
