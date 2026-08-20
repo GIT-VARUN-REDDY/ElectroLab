@@ -1,41 +1,94 @@
-const sendEmail = async ({ to, subject, html }) => {
-  console.log('📧 sendEmail called for:', to);
-  console.log('📧 Subject:', subject);
-  console.log('📧 BREVO_API_KEY exists:', !!process.env.BREVO_API_KEY);
-  console.log('📧 BREVO_API_KEY starts with:', process.env.BREVO_API_KEY?.slice(0, 10));
-  console.log('📧 FROM_EMAIL:', process.env.FROM_EMAIL);
-  console.log('📧 FROM_NAME:', process.env.FROM_NAME);
+const https = require('https');
 
-  try {
-    const SibApiV3Sdk = require('@getbrevo/brevo');
-    const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+const sendEmail = ({ to, subject, html }) => {
+  return new Promise((resolve, reject) => {
+    const apiKey = process.env.BREVO_API_KEY;
+    const fromEmail = process.env.FROM_EMAIL;
+    const fromName = process.env.FROM_NAME || 'ElectroLab';
 
-    apiInstance.setApiKey(
-      SibApiV3Sdk.TransactionalEmailsApiApiKeys.apiKey,
-      process.env.BREVO_API_KEY
-    );
+    if (!apiKey) {
+      return reject(new Error('BREVO_API_KEY is not configured'));
+    }
 
-    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
-    sendSmtpEmail.subject = subject;
-    sendSmtpEmail.htmlContent = html;
-    sendSmtpEmail.sender = {
-      name: process.env.FROM_NAME || 'ElectroLab',
-      email: process.env.FROM_EMAIL || 'chintureddy1470@gmail.com',
+    if (!fromEmail) {
+      return reject(new Error('FROM_EMAIL is not configured'));
+    }
+
+    const payload = JSON.stringify({
+      sender: {
+        name: fromName,
+        email: fromEmail,
+      },
+      to: [
+        {
+          email: to,
+        },
+      ],
+      subject,
+      htmlContent: html,
+    });
+
+    const options = {
+      hostname: 'api.brevo.com',
+      path: '/v3/smtp/email',
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'api-key': apiKey,
+        'content-type': 'application/json',
+        'content-length': Buffer.byteLength(payload),
+      },
     };
-    sendSmtpEmail.to = [{ email: to }];
 
-    console.log('📧 Sending email via Brevo API...');
-    const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
-    console.log('✅ Email sent successfully to:', to);
-    console.log('✅ Message ID:', result?.body?.messageId || result?.response?.body?.messageId);
-    return result;
-  } catch (error) {
-    console.error('❌ sendEmail FULL ERROR:', error);
-    console.error('❌ sendEmail error message:', error.message);
-    console.error('❌ sendEmail error status:', error.status);
-    console.error('❌ sendEmail error response:', JSON.stringify(error.response?.body || {}));
-    throw error;
-  }
+    const request = https.request(options, (response) => {
+      let body = '';
+
+      response.on('data', (chunk) => {
+        body += chunk;
+      });
+
+      response.on('end', () => {
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          let result;
+
+          try {
+            result = JSON.parse(body);
+          } catch {
+            result = body;
+          }
+
+          console.log('✅ Brevo email sent:', result);
+
+          resolve(result);
+        } else {
+          console.error(
+            '❌ Brevo email failed:',
+            response.statusCode,
+            body
+          );
+
+          reject(
+            new Error(
+              `Brevo email failed with status ${response.statusCode}: ${body}`
+            )
+          );
+        }
+      });
+    });
+
+    request.on('error', (error) => {
+      console.error('❌ Brevo request error:', error.message);
+      reject(error);
+    });
+
+    request.setTimeout(30000, () => {
+      request.destroy();
+      reject(new Error('Brevo API request timed out'));
+    });
+
+    request.write(payload);
+    request.end();
+  });
 };
 
 module.exports = sendEmail;
