@@ -61,6 +61,13 @@ app.use('/api/users', userRoutes);
 app.use('/api/contacts', contactRoutes);
 app.use('/api/analytics', analyticsRoutes);
 
+app.get('/', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'ElectroLab API is running!',
+  });
+});
+
 app.use(notFound);
 app.use(errorHandler);
 
